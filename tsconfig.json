@@ -19,6 +19,8 @@
       }
     ],
     "paths": {
+      "@/lib/supabase": ["./src/lib/supabase/index.ts"],
+      "@/types/*": ["./src/types/*"],
       "@/*": ["./src/*"]
     }
   },

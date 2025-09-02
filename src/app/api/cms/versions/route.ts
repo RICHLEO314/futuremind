@@ -44,7 +44,8 @@ export async function POST(req: NextRequest) {
 			if (role !== 'content_admin') return err(403, 'Only admin can create published')
 		}
 
-		const { data: maxRow } = await supabase
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const { data: maxRow } = await (supabase as any)
 			.from('content_version')
 			.select('version_number')
 			.eq('item_id', item_id)
@@ -59,14 +60,16 @@ export async function POST(req: NextRequest) {
 			state,
 			created_by: user.id,
 		}
-		const { data: version, error: vErr } = await supabase
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const { data: version, error: vErr } = await (supabase as any)
 			.from('content_version')
 			.insert(insertBody)
 			.select('id, version_number')
 			.single()
 		if (vErr) return err(500, vErr.message)
 
-		const { error: lErr, data: localeRow } = await supabase
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const { error: lErr, data: localeRow } = await (supabase as any)
 			.from('content_locale')
 			.insert({ version_id: (version as VersionRow).id, locale, title, summary, content })
 			.select('*')
@@ -75,7 +78,10 @@ export async function POST(req: NextRequest) {
 
 		return NextResponse.json({ data: { version: version as VersionRow, locale: localeRow } }, { status: 201 })
 	} catch (e: unknown) {
-		try { await (await getClient()).rpc('write_audit', { p_entity: 'content_version', p_entity_id: null, p_action: 'versions_post_error', p_diff: { message: getErrorMessage(e) } }) } catch {}
+		try { 
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			await (await getClient()).rpc('write_audit', { p_entity: 'content_version', p_entity_id: null, p_action: 'versions_post_error', p_diff: { message: getErrorMessage(e) } } as any) 
+		} catch {}
 		return err(500, getErrorMessage(e))
 	}
 } 

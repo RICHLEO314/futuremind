@@ -1,5 +1,5 @@
-import { createBrowserClient } from '@supabase/ssr'
-import { createClient as createServerClientCore } from '@supabase/supabase-js'
+import { createBrowserClient, createServerClient } from '@supabase/ssr'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import type { Database } from '@/types/database'
 
@@ -13,16 +13,22 @@ export function getBrowserClient() {
 
 export async function getClient() {
 	const cookieStore = await cookies()
-	return createServerClientCore<Database>(supabaseUrl, supabaseAnonKey, {
-		auth: { persistSession: false },
+	return createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
 		cookies: {
-			getAll() { return cookieStore.getAll() },
-			setAll(cookiesToSet) { try { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } catch {} },
+			getAll() {
+				return cookieStore.getAll()
+			},
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
+				try {
+					cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
+				} catch {}
+			},
 		},
 	})
 }
 
 export function getAdminClient() {
 	if (!serviceKey) throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY')
-	return createServerClientCore<Database>(supabaseUrl, serviceKey, { auth: { persistSession: false } })
+	return createServiceClient<Database>(supabaseUrl, serviceKey, { auth: { persistSession: false } })
 } 

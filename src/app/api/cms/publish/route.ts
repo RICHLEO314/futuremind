@@ -47,11 +47,13 @@ export async function POST(req: NextRequest) {
 		const { data: userData, error: userErr } = await supabase.auth.getUser()
 		if (userErr || !userData.user) return err(401, 'Unauthorized')
 
-		const { data: current } = await supabase.from('content_version').select('id, state, item_id, version_number').eq('id', version_id).single()
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const { data: current } = await (supabase as any).from('content_version').select('id, state, item_id, version_number').eq('id', version_id).single()
 		if (!current) return err(404, 'Version not found')
-		if (current.state === 'published') return NextResponse.json({ data: current, message: 'Already published' }, { status: 200 })
+		if ((current as VersionInfo).state === 'published') return NextResponse.json({ data: current, message: 'Already published' }, { status: 200 })
 
-		const { data: version, error: vErr } = await supabase
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const { data: version, error: vErr } = await (supabase as any)
 			.from('content_version')
 			.update({ state: 'published' })
 			.eq('id', version_id)
@@ -61,17 +63,21 @@ export async function POST(req: NextRequest) {
 
 		let webhookNote = notes ?? ''
 		if (N8N_WEBHOOK_URL) {
-			const result = await postWithRetry(N8N_WEBHOOK_URL, { event: 'cms_publish', payload: { version_id: version.id } })
+			const result = await postWithRetry(N8N_WEBHOOK_URL, { event: 'cms_publish', payload: { version_id: (version as VersionInfo).id } })
 			if (result.ok) webhookNote += `\nwebhook: ok(${result.status})`
 			else webhookNote += `\nwebhook: fail(${result.error})`
 		}
 
-		const publishInsert: Database['public']['Tables']['publish_log']['Insert'] = { item_id: (version as VersionInfo).item_id, version_id: version.id, action: 'publish', actor: userData.user.id, notes: webhookNote }
-		await supabase.from('publish_log').insert(publishInsert)
+		const publishInsert: Database['public']['Tables']['publish_log']['Insert'] = { item_id: (version as VersionInfo).item_id, version_id: (version as VersionInfo).id, action: 'publish', actor: userData.user.id, notes: webhookNote }
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		await (supabase as any).from('publish_log').insert(publishInsert)
 
 		return NextResponse.json({ data: version as VersionInfo }, { status: 200 })
 	} catch (e: unknown) {
-		try { await (await getClient()).rpc('write_audit', { p_entity: 'content_version', p_entity_id: null, p_action: 'publish_post_error', p_diff: { message: getErrorMessage(e) } }) } catch {}
+		try { 
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			await (await getClient()).rpc('write_audit', { p_entity: 'content_version', p_entity_id: null, p_action: 'publish_post_error', p_diff: { message: getErrorMessage(e) } } as any) 
+		} catch {}
 		return err(500, getErrorMessage(e))
 	}
 } 

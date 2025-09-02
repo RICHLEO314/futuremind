@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
 		if (userErr || !user) return err(401, 'Unauthorized')
 
 		const insertBody: ModuleInsert = { key, title, description, created_by: user.id }
-		const { data, error } = await supabase
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const { data, error } = await (supabase as any)
 			.from('content_module')
 			.insert(insertBody)
 			.select('*')
@@ -55,7 +56,8 @@ export async function POST(req: NextRequest) {
 		return NextResponse.json({ data }, { status: 201 })
 	} catch (e: unknown) {
 		try {
-			await (await getClient()).rpc('write_audit', { p_entity: 'content_module', p_entity_id: null, p_action: 'modules_post_error', p_diff: { message: getErrorMessage(e) } })
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			await (await getClient()).rpc('write_audit', { p_entity: 'content_module', p_entity_id: null, p_action: 'modules_post_error', p_diff: { message: getErrorMessage(e) } } as any)
 		} catch {}
 		return err(500, getErrorMessage(e))
 	}
