@@ -1,4 +1,3 @@
-/* eslint-disable */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { z } from 'zod'
@@ -14,8 +13,13 @@ function err(status: number, message: string) {
 	return NextResponse.json({ error: { code: status, message } }, { status })
 }
 
+function getErrorMessage(e: unknown): string {
+	if (e instanceof Error) return e.message
+	try { return JSON.stringify(e) } catch { return String(e) }
+}
+
 export async function POST(req: NextRequest) {
-	const supabase = (await createClient()) as any
+	const supabase = await createClient()
 	try {
 		const parsed = ProgressSchema.safeParse(await req.json())
 		if (!parsed.success) return err(400, parsed.error.issues.map(i => i.message).join('; '))
@@ -48,8 +52,8 @@ export async function POST(req: NextRequest) {
 		)
 		if (error) return err(500, error.message)
 		return NextResponse.json({ ok: true })
-	} catch (e: any) {
-		try { await supabase.rpc('write_audit', { p_entity_type: 'user_progress', p_entity_id: null, p_action: 'progress_post_error', p_diff: { message: e?.message ?? 'Internal Error' } }) } catch {}
-		return err(500, e?.message ?? 'Internal Error')
+	} catch (e: unknown) {
+		try { await (await createClient()).rpc('write_audit', { p_entity_type: 'user_progress', p_entity_id: null, p_action: 'progress_post_error', p_diff: { message: getErrorMessage(e) } }) } catch {}
+		return err(500, getErrorMessage(e))
 	}
 } 

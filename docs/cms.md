@@ -21,30 +21,36 @@
 
 ## RBAC + RLS
 - profiles.role ∈ {user, content_viewer, content_editor, content_admin}
-- viewer: SELECT
-- editor: SELECT/INSERT/UPDATE（部分表）
-- admin: 额外查看 publish/audit 日志与版本强制更新
+- viewer: 仅可读 v_published_content
+- editor: 可写 content_item/locale（创建草稿），可写 content_version 的 draft/review 状态
+- admin: 可发布并查看 audit/publish 日志
 
 ## API
 - GET/POST `/api/cms/modules`
-- GET/POST `/api/cms/items`（可用 ?module= 过滤）
+- GET/POST `/api/cms/items`（?module= 过滤）
 - POST `/api/cms/versions`（创建版本+本地化）
-- POST `/api/cms/publish`（状态置为 published，写 publish_log，并触发 n8n）
-- GET `/api/cms/graph?item=:id`（语义关系节点/边）
-- POST `/api/progress`（记录阅读/冥想/PBL/洞见/作品进度）
+- POST `/api/cms/publish`（幂等+重试 webhook，记录 notes）
+- GET `/api/cms/graph?item=:id`
+- POST `/api/progress`
 
 ## 后台
-- `/admin/content`：模块管理、条目管理、发布与审计面板入口
+- `/admin/content`：模块、条目、发布与审计，i18n 与媒资/图谱入口
 
 ## 种子脚本
-- `node scripts/seed-cms.js` 导入四库最小内容
+- `node scripts/seed-cms.js` 导入四库最小内容（14 天冥想、PBL 示例、极简物理若干章、意识树四象限），并发布部分条目
 
-## 环境变量
-- NEXT_PUBLIC_SUPABASE_URL
-- NEXT_PUBLIC_SUPABASE_ANON_KEY
-- SUPABASE_SERVICE_ROLE_KEY（仅本地或 CI 种子脚本使用）
-- N8N_WEBHOOK_URL（可选）
+## CI 配置与 Secrets
+- 工作流：`.github/workflows/ci.yml`
+  - 步骤：typecheck → build → vitest → playwright
+  - 依赖：Node 20
+  - 环境变量：从 GitHub Secrets 注入
+    - `NEXT_PUBLIC_SUPABASE_URL`
+    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+    - `SUPABASE_SERVICE_ROLE_KEY`（仅构建/种子/测试用，前端不可用）
+    - `N8N_WEBHOOK_URL`（可选）
+- 配置方法（GitHub → Repository → Settings → Secrets and variables → Actions → New repository secret）
+  - 将上述四项以 name/value 形式添加
 
-## 联动点
-- 发布内容 -> n8n webhook（cms_publish） -> 生成向量嵌入（pgvector）-> 更新盖亚知识库
-- 用户完成 冥想/PBL/阅读 节点 -> POST /api/progress -> 写 user_progress -> 驱动意识进化树 
+## 安全
+- 严禁在客户端或日志中泄露 `SUPABASE_SERVICE_ROLE_KEY`
+- 仅在服务端与脚本中使用 service role 
