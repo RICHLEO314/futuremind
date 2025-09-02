@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getClient } from '@/lib/supabase'
 import { z } from 'zod'
+import type { Database } from '@/types/database'
 
 const ItemSchema = z.object({
 	module_id: z.string().uuid(),
@@ -10,7 +11,9 @@ const ItemSchema = z.object({
 	default_locale: z.string().default('zh-CN').optional(),
 })
 
-type ItemRow = { id: string; module_id: string; slug: string; title: string; summary: string | null; default_locale: string | null }
+type ItemRow = Database['public']['Tables']['content_item']['Row']
+
+type ItemInsert = Database['public']['Tables']['content_item']['Insert']
 
 function err(status: number, message: string) {
 	return NextResponse.json({ error: { code: status, message } }, { status })
@@ -23,7 +26,7 @@ function getErrorMessage(e: unknown): string {
 
 export async function GET(req: NextRequest) {
 	try {
-		const supabase = await createClient()
+		const supabase = await getClient()
 		const moduleId = req.nextUrl.searchParams.get('module')
 		let query = supabase.from('content_item').select('*').order('created_at', { ascending: false })
 		if (moduleId) {
@@ -38,7 +41,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-	const supabase = await createClient()
+	const supabase = await getClient()
 	try {
 		const parsed = ItemSchema.safeParse(await req.json())
 		if (!parsed.success) return err(400, parsed.error.issues.map(i => i.message).join('; '))
@@ -50,16 +53,17 @@ export async function POST(req: NextRequest) {
 		} = await supabase.auth.getUser()
 		if (userErr || !user) return err(401, 'Unauthorized')
 
+		const insertBody: ItemInsert = { module_id, slug, title, summary, default_locale, created_by: user.id }
 		const { data, error } = await supabase
 			.from('content_item')
-			.insert({ module_id, slug, title, summary, default_locale, created_by: user.id })
+			.insert(insertBody)
 			.select('*')
 			.single()
 		if (error) return err(500, error.message)
 		return NextResponse.json({ data: data as ItemRow }, { status: 201 })
 	} catch (e: unknown) {
 		try {
-			await (await createClient()).rpc('write_audit', { p_entity_type: 'content_item', p_entity_id: null, p_action: 'items_post_error', p_diff: { message: getErrorMessage(e) } })
+			await (await getClient()).rpc('write_audit', { p_entity_type: 'content_item', p_entity_id: null, p_action: 'items_post_error', p_diff: { message: getErrorMessage(e) } })
 		} catch {}
 		return err(500, getErrorMessage(e))
 	}

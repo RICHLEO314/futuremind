@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getClient } from '@/lib/supabase'
 import { z } from 'zod'
+import type { Database } from '@/types/database'
 
 const VersionSchema = z.object({
 	item_id: z.string().uuid(),
@@ -11,7 +12,7 @@ const VersionSchema = z.object({
 	content: z.any().optional(),
 })
 
-type VersionRow = { id: string; version_number: number }
+type VersionRow = Database['public']['Tables']['content_version']['Row']
 
 type ProfileRole = { role: 'user' | 'content_viewer' | 'content_editor' | 'content_admin' }
 
@@ -25,7 +26,7 @@ function getErrorMessage(e: unknown): string {
 }
 
 export async function POST(req: NextRequest) {
-	const supabase = await createClient()
+	const supabase = await getClient()
 	try {
 		const parsed = VersionSchema.safeParse(await req.json())
 		if (!parsed.success) return err(400, parsed.error.issues.map(i => i.message).join('; '))
@@ -43,24 +44,29 @@ export async function POST(req: NextRequest) {
 			if (role !== 'content_admin') return err(403, 'Only admin can create published')
 		}
 
-		const { data: lastVersion } = await supabase
+		const { data: maxRow } = await supabase
 			.from('content_version')
 			.select('version_number')
 			.eq('item_id', item_id)
 			.order('version_number', { ascending: false })
 			.limit(1)
-			.single()
+			.maybeSingle()
+		const nextVersionNumber = (maxRow?.version_number ?? 0) + 1
 
-		const nextVersion = (lastVersion?.version_number ?? 0) + 1
-
+		const insertBody: Database['public']['Tables']['content_version']['Insert'] = {
+			item_id,
+			version_number: nextVersionNumber,
+			state,
+			created_by: user.id,
+		}
 		const { data: version, error: vErr } = await supabase
 			.from('content_version')
-			.insert({ item_id, version_number: nextVersion, state, created_by: user.id })
+			.insert(insertBody)
 			.select('id, version_number')
 			.single()
 		if (vErr) return err(500, vErr.message)
 
-		const { data: localeRow, error: lErr } = await supabase
+		const { error: lErr, data: localeRow } = await supabase
 			.from('content_locale')
 			.insert({ version_id: (version as VersionRow).id, locale, title, summary, content })
 			.select('*')
@@ -69,7 +75,7 @@ export async function POST(req: NextRequest) {
 
 		return NextResponse.json({ data: { version: version as VersionRow, locale: localeRow } }, { status: 201 })
 	} catch (e: unknown) {
-		try { await (await createClient()).rpc('write_audit', { p_entity_type: 'content_version', p_entity_id: null, p_action: 'versions_post_error', p_diff: { message: getErrorMessage(e) } }) } catch {}
+		try { await (await getClient()).rpc('write_audit', { p_entity_type: 'content_version', p_entity_id: null, p_action: 'versions_post_error', p_diff: { message: getErrorMessage(e) } }) } catch {}
 		return err(500, getErrorMessage(e))
 	}
 } 
