@@ -1,38 +1,60 @@
 /* eslint-disable */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { z } from 'zod'
+
+const ItemSchema = z.object({
+	module_id: z.string().uuid(),
+	slug: z.string().min(1),
+	title: z.string().min(1),
+	summary: z.string().optional(),
+	default_locale: z.string().default('zh-CN').optional(),
+})
+
+function err(status: number, message: string) {
+	return NextResponse.json({ error: { code: status, message } }, { status })
+}
 
 export async function GET(req: NextRequest) {
-	const supabase = (await createClient()) as any
-	const moduleId = req.nextUrl.searchParams.get('module')
-	let query = supabase.from('content_item').select('*').order('created_at', { ascending: false })
-	if (moduleId) {
-		query = query.eq('module_id', moduleId)
+	try {
+		const supabase = (await createClient()) as any
+		const moduleId = req.nextUrl.searchParams.get('module')
+		let query = supabase.from('content_item').select('*').order('created_at', { ascending: false })
+		if (moduleId) {
+			query = query.eq('module_id', moduleId)
+		}
+		const { data, error } = await query
+		if (error) return err(500, error.message)
+		return NextResponse.json({ data })
+	} catch (e: any) {
+		return err(500, e?.message ?? 'Internal Error')
 	}
-	const { data, error } = await query
-	if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-	return NextResponse.json({ data })
 }
 
 export async function POST(req: NextRequest) {
 	const supabase = (await createClient()) as any
-	const body = await req.json()
-	const { module_id, slug, title, summary, default_locale } = body
+	try {
+		const parsed = ItemSchema.safeParse(await req.json())
+		if (!parsed.success) return err(400, parsed.error.issues.map(i => i.message).join('; '))
+		const { module_id, slug, title, summary, default_locale } = parsed.data
 
-	if (!module_id || !slug || !title) return NextResponse.json({ error: 'module_id, slug, title required' }, { status: 400 })
+		const {
+			data: { user },
+			error: userErr,
+		} = await supabase.auth.getUser()
+		if (userErr || !user) return err(401, 'Unauthorized')
 
-	const {
-		data: { user },
-		error: userErr,
-	} = await supabase.auth.getUser()
-	if (userErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-	const { data, error } = await supabase
-		.from('content_item')
-		.insert({ module_id, slug, title, summary, default_locale, created_by: user.id })
-		.select('*')
-		.single()
-
-	if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-	return NextResponse.json({ data }, { status: 201 })
+		const { data, error } = await supabase
+			.from('content_item')
+			.insert({ module_id, slug, title, summary, default_locale, created_by: user.id })
+			.select('*')
+			.single()
+		if (error) return err(500, error.message)
+		return NextResponse.json({ data }, { status: 201 })
+	} catch (e: any) {
+		try {
+			await supabase.rpc('write_audit', { p_entity_type: 'content_item', p_entity_id: null, p_action: 'items_post_error', p_diff: { message: e?.message ?? 'Internal Error' } })
+		} catch {}
+		return err(500, e?.message ?? 'Internal Error')
+	}
 } 

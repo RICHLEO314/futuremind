@@ -15,9 +15,18 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
+      - run: npm run typecheck
       - run: npm run build
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-      # - name: Run Playwright tests (optional)
-      #   run: npx playwright install --with-deps && npm run test:e2e 
+          N8N_WEBHOOK_URL: ${{ secrets.N8N_WEBHOOK_URL }}
+      - name: Unit tests
+        run: npx vitest run --coverage
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      # - name: Install Playwright (optional)
+      #   run: npx playwright install --with-deps
+      # - name: E2E tests (optional)
+      #   run: npm run test:e2e 

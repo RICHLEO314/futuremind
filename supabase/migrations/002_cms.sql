@@ -219,3 +219,50 @@ CREATE INDEX IF NOT EXISTS idx_content_version_item ON public.content_version(it
 CREATE INDEX IF NOT EXISTS idx_content_locale_version ON public.content_locale(version_id);
 CREATE INDEX IF NOT EXISTS idx_content_relation_src ON public.content_relation(source_item_id);
 CREATE INDEX IF NOT EXISTS idx_content_relation_tgt ON public.content_relation(target_item_id); 
+
+-- RLS refinements
+-- Allow public (all authenticated) to read only published versions
+CREATE POLICY IF NOT EXISTS "versions_select_published_anyone" ON public.content_version
+	FOR SELECT USING (state = 'published');
+
+-- Editors can insert/update draft/review; Admin can publish
+CREATE POLICY IF NOT EXISTS "versions_insert_editors_states" ON public.content_version
+	FOR INSERT WITH CHECK (public.is_content_editor());
+
+CREATE POLICY IF NOT EXISTS "versions_update_editors_draft_review" ON public.content_version
+	FOR UPDATE USING (public.is_content_editor()) WITH CHECK (state IN ('draft','review'));
+
+CREATE POLICY IF NOT EXISTS "versions_update_admin_publish" ON public.content_version
+	FOR UPDATE USING (public.is_content_admin()) WITH CHECK (true);
+
+-- Tighten base table selects to editors/admin only (except versions rule above)
+DROP POLICY IF EXISTS "items_select_viewers" ON public.content_item;
+CREATE POLICY "items_select_editors" ON public.content_item FOR SELECT USING (public.is_content_editor() OR public.is_content_admin());
+
+DROP POLICY IF EXISTS "modules_select_viewers" ON public.content_module;
+CREATE POLICY "modules_select_editors" ON public.content_module FOR SELECT USING (public.is_content_editor() OR public.is_content_admin());
+
+DROP POLICY IF EXISTS "locales_select_viewers" ON public.content_locale;
+CREATE POLICY "locales_select_editors" ON public.content_locale FOR SELECT USING (public.is_content_editor() OR public.is_content_admin());
+
+DROP POLICY IF EXISTS "media_select_viewers" ON public.media_asset;
+CREATE POLICY "media_select_editors" ON public.media_asset FOR SELECT USING (public.is_content_editor() OR public.is_content_admin());
+
+DROP POLICY IF EXISTS "relations_select_viewers" ON public.content_relation;
+CREATE POLICY "relations_select_editors" ON public.content_relation FOR SELECT USING (public.is_content_editor() OR public.is_content_admin());
+
+-- View grant: allow public read on published content only through view
+REVOKE ALL ON TABLE public.v_published_content FROM PUBLIC;
+GRANT SELECT ON TABLE public.v_published_content TO anon, authenticated, service_role;
+
+-- Audit helper
+CREATE OR REPLACE FUNCTION public.write_audit(
+	p_entity_type TEXT,
+	p_entity_id UUID,
+	p_action TEXT,
+	p_diff JSONB
+) RETURNS VOID AS $$
+BEGIN
+	INSERT INTO public.audit_log(entity_type, entity_id, action, actor, diff)
+	VALUES(p_entity_type, p_entity_id, p_action, auth.uid(), COALESCE(p_diff,'{}'::jsonb));
+END;$$ LANGUAGE plpgsql SECURITY DEFINER; 

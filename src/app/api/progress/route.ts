@@ -1,38 +1,55 @@
 /* eslint-disable */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { z } from 'zod'
+
+const ProgressSchema = z.object({
+	progress_type: z.enum(['reading','meditation','pbl','insight','artifact']),
+	ref_item_id: z.string().uuid().nullable().optional(),
+	progress_value: z.number().int().min(0).max(100).default(1).optional(),
+	note: z.string().optional(),
+})
+
+function err(status: number, message: string) {
+	return NextResponse.json({ error: { code: status, message } }, { status })
+}
 
 export async function POST(req: NextRequest) {
 	const supabase = (await createClient()) as any
-	const body = await req.json()
-	const { progress_type, ref_item_id, progress_value = 1, note } = body
-	if (!progress_type) return NextResponse.json({ error: 'progress_type required' }, { status: 400 })
+	try {
+		const parsed = ProgressSchema.safeParse(await req.json())
+		if (!parsed.success) return err(400, parsed.error.issues.map(i => i.message).join('; '))
+		const { progress_type, ref_item_id, progress_value = 1, note } = parsed.data
 
-	const {
-		data: { user },
-		error: userErr,
-	} = await supabase.auth.getUser()
-	if (userErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+		const {
+			data: { user },
+			error: userErr,
+		} = await supabase.auth.getUser()
+		if (userErr || !user) return err(401, 'Unauthorized')
 
-	const { data: season } = await supabase
-		.from('seasons')
-		.select('id')
-		.eq('is_active', true)
-		.limit(1)
-		.single()
-	if (!season) return NextResponse.json({ error: 'No active season' }, { status: 400 })
+		const { data: season } = await supabase
+			.from('seasons')
+			.select('id')
+			.eq('is_active', true)
+			.limit(1)
+			.single()
+		if (!season) return err(400, 'No active season')
 
-	const { error } = await supabase.from('user_progress').upsert(
-		{
-			user_id: user.id,
-			season_id: season.id,
-			progress_type,
-			ref_item_id: ref_item_id ?? null,
-			progress_value,
-			note: note ?? null,
-		},
-		{ onConflict: 'user_id,season_id' }
-	)
-	if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-	return NextResponse.json({ ok: true })
+		const { error } = await supabase.from('user_progress').upsert(
+			{
+				user_id: user.id,
+				season_id: season.id,
+				progress_type,
+				ref_item_id: ref_item_id ?? null,
+				progress_value,
+				note: note ?? null,
+			},
+			{ onConflict: 'user_id,season_id' }
+		)
+		if (error) return err(500, error.message)
+		return NextResponse.json({ ok: true })
+	} catch (e: any) {
+		try { await supabase.rpc('write_audit', { p_entity_type: 'user_progress', p_entity_id: null, p_action: 'progress_post_error', p_diff: { message: e?.message ?? 'Internal Error' } }) } catch {}
+		return err(500, e?.message ?? 'Internal Error')
+	}
 } 
