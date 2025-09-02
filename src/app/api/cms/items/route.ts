@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
 		return NextResponse.json({ data: data as ItemRow }, { status: 201 })
 	} catch (e: unknown) {
 		try {
-			await (await getClient()).rpc('write_audit', { p_entity_type: 'content_item', p_entity_id: null, p_action: 'items_post_error', p_diff: { message: getErrorMessage(e) } })
+			await (await getClient()).rpc('write_audit', { p_entity: 'content_item', p_entity_id: null, p_action: 'items_post_error', p_diff: { message: getErrorMessage(e) } })
 		} catch {}
 		return err(500, getErrorMessage(e))
 	}

@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
 
 		return NextResponse.json({ data: { version: version as VersionRow, locale: localeRow } }, { status: 201 })
 	} catch (e: unknown) {
-		try { await (await getClient()).rpc('write_audit', { p_entity_type: 'content_version', p_entity_id: null, p_action: 'versions_post_error', p_diff: { message: getErrorMessage(e) } }) } catch {}
+		try { await (await getClient()).rpc('write_audit', { p_entity: 'content_version', p_entity_id: null, p_action: 'versions_post_error', p_diff: { message: getErrorMessage(e) } }) } catch {}
 		return err(500, getErrorMessage(e))
 	}
 } 

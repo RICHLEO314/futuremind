@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS public.publish_log (
 
 CREATE TABLE IF NOT EXISTS public.audit_log (
 	id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-	entity_type TEXT NOT NULL,
+	entity TEXT NOT NULL,
 	entity_id UUID NOT NULL,
 	action TEXT NOT NULL,
 	actor UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
@@ -255,14 +255,25 @@ CREATE POLICY "relations_select_editors" ON public.content_relation FOR SELECT U
 REVOKE ALL ON TABLE public.v_published_content FROM PUBLIC;
 GRANT SELECT ON TABLE public.v_published_content TO anon, authenticated, service_role;
 
--- Audit helper
+-- Rename audit_log column to align with docs (entity_type -> entity)
+DO $$ BEGIN
+	IF EXISTS (
+		SELECT 1 FROM information_schema.columns
+		WHERE table_schema = 'public' AND table_name = 'audit_log' AND column_name = 'entity_type'
+	) THEN
+		ALTER TABLE public.audit_log RENAME COLUMN entity_type TO entity;
+	END IF;
+END $$;
+
+-- Replace write_audit to match new column name and parameters
+DROP FUNCTION IF EXISTS public.write_audit(TEXT, UUID, TEXT, JSONB);
 CREATE OR REPLACE FUNCTION public.write_audit(
-	p_entity_type TEXT,
+	p_entity TEXT,
 	p_entity_id UUID,
 	p_action TEXT,
 	p_diff JSONB
 ) RETURNS VOID AS $$
 BEGIN
-	INSERT INTO public.audit_log(entity_type, entity_id, action, actor, diff)
-	VALUES(p_entity_type, p_entity_id, p_action, auth.uid(), COALESCE(p_diff,'{}'::jsonb));
+	INSERT INTO public.audit_log(entity, entity_id, action, actor, diff)
+	VALUES(p_entity, p_entity_id, p_action, auth.uid(), COALESCE(p_diff,'{}'::jsonb));
 END;$$ LANGUAGE plpgsql SECURITY DEFINER; 
