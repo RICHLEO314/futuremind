@@ -1,8 +1,9 @@
-import { createClient } from '@/lib/supabase/server'
+import { getClient } from '@/lib/supabase'
 
-export default async function ItemsPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
-	const supabase = await createClient()
-	const raw = searchParams?.module
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export default async function ItemsPage(props: any) {
+	const supabase = await getClient()
+	const raw = props?.searchParams?.module as string | string[] | undefined
 	const moduleId = Array.isArray(raw) ? raw[0] : raw
 	let query = supabase.from('content_item').select('id, title, slug').order('created_at', { ascending: false })
 	if (moduleId) query = query.eq('module_id', moduleId)
