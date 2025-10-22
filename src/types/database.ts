@@ -43,6 +43,11 @@ export type Database = {
 				Insert: { id?: string; module_id?: string | null; item_id?: string | null; url: string; type?: string | null; meta?: Json | null; created_by?: string | null; created_at?: string }
 				Update: Partial<Database['public']['Tables']['media_asset']['Row']>
 			}
+			media_resources: {
+				Row: { id: string; module_id: string | null; item_id: string | null; resource_type: 'video_link' | 'courseware' | 'link' | 'document'; title: string; url: string; platform: string | null; description: string | null; meta: Json | null; created_by: string | null; created_at: string; updated_at: string }
+				Insert: { id?: string; module_id?: string | null; item_id?: string | null; resource_type: 'video_link' | 'courseware' | 'link' | 'document'; title: string; url: string; platform?: string | null; description?: string | null; meta?: Json | null; created_by?: string | null; created_at?: string; updated_at?: string }
+				Update: Partial<Database['public']['Tables']['media_resources']['Row']>
+			}
 			content_relation: {
 				Row: { id: string; source_item_id: string; target_item_id: string; relation_type: string; weight: number | null }
 				Insert: { id?: string; source_item_id: string; target_item_id: string; relation_type: string; weight?: number | null }
